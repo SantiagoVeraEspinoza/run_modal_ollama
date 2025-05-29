@@ -35,7 +35,7 @@ app = modal.App("ollama-server", image=ollama_image)
 model_volume = modal.Volume.from_name("ollama-models-store", create_if_missing=True)
 
 @app.cls(
-    gpu="T4",
+    gpu="H100",
     volumes={MODEL_DIR: model_volume},
     timeout=60 * 5,
     min_containers=1,
@@ -46,7 +46,12 @@ class OllamaServer:
     @modal.enter()
     async def start_ollama(self):
         print("Starting Ollama server...")
-        self.ollama_process = subprocess.Popen(["ollama", "serve"])
+
+        env = os.environ.copy()
+        env["OLLAMA_CONTEXT_LENGTH"] = "42000"
+        env["CUDA_VISIBLE_DEVICES"] = "0"
+
+        self.ollama_process = subprocess.Popen(["ollama", "serve"], env=env)
         await asyncio.sleep(10)  # Let Ollama boot
 
         loop = asyncio.get_running_loop()
@@ -79,7 +84,8 @@ class OllamaServer:
         modelfile_path = f"/tmp/Modelfile.{CUSTOM_MODEL}"
         with open(modelfile_path, "w") as f:
             # f.write(f"FROM {ORIGINAL_MODEL}\nPARAMETER num_ctx 16384\n")
-            f.write(f"FROM {ORIGINAL_MODEL}\n")
+            f.write(f"FROM {ORIGINAL_MODEL}\nPARAMETER temperature 0.0\nPARAMETER top_p 0.95\n")
+            # f.write(f"FROM {ORIGINAL_MODEL}\n")
 
         # Build the new custom model
         print(f"Building custom model: {CUSTOM_MODEL}")
